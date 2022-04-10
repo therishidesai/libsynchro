@@ -1,0 +1,8 @@
+[workspace]
+members = [
+	"libsynchro",
+	"libsynchro-apps",
+]
+
+[profile.release]
+debug=true
