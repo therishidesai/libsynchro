@@ -1,10 +1,13 @@
 use arr_macro::arr;
 
+use rand::Rng;
+
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{thread, time};
 
 struct RCU {
+	data: AtomicUsize,
     gen: AtomicUsize,
     rc: [AtomicUsize; 1024],
 }
@@ -12,6 +15,7 @@ struct RCU {
 fn main() {
     let rc_arr: [AtomicUsize; 1024] = arr![AtomicUsize::new(0); 1024];
     let r = RCU {
+		data: AtomicUsize::new(0),
         gen: AtomicUsize::new(0),
         rc: rc_arr,
     };
@@ -23,7 +27,11 @@ fn main() {
 		for _ in 0..10 {
 			thread::sleep(time::Duration::from_millis(10));
 			let mut g = arw.gen.load(Ordering::Relaxed);
+			let mut d = arw.data.load(Ordering::Relaxed);
 			g +=1;
+			d +=1;
+			println!("gen {}, data {}", g, d);
+			arw.data.store(d, Ordering::Relaxed);
 			arw.gen.store(g, Ordering::Relaxed);
 		}
     });
@@ -32,12 +40,14 @@ fn main() {
         let arr = Arc::clone(&ar);
         let handle = thread::spawn(move || {
 			for _ in 0..10 {
-				thread::sleep(time::Duration::from_millis(7));
+				let mut rng = rand::thread_rng();
+				thread::sleep(time::Duration::from_millis(rng.gen_range(1..10)));
 				let num = arr.gen.load(Ordering::Relaxed);
-				println!("Reader {}: gen {}", i, num);
+				let d = arr.data.load(Ordering::Relaxed);
 				let mut rc = arr.rc[num].load(Ordering::Relaxed);
 				rc += 1;
 				arr.rc[num].store(rc, Ordering::Relaxed);
+				println!("Reader {}: gen {}, data {}", i, num, d);
 			}
         });
         handles.push(handle);
@@ -47,8 +57,10 @@ fn main() {
         handle.join().unwrap();
     }
 
+	writer.join().unwrap();
+
     println!("Final Gen: {}", ar.gen.load(Ordering::Relaxed));
-    for i in 0..ar.gen.load(Ordering::Relaxed)+1 {
-        println!("gen {}, rc: {}", i, ar.rc[i].load(Ordering::Relaxed));
-    }
+    // for i in 0..ar.gen.load(Ordering::Relaxed)+1 {
+    //     println!("gen {}, rc: {}", i, ar.rc[i].load(Ordering::Relaxed));
+    // }
 }
