@@ -15,7 +15,7 @@ struct RCU {
 fn main() {
     let rc_arr: [AtomicUsize; 1024] = arr![AtomicUsize::new(0); 1024];
     let r = RCU {
-		data: AtomicUsize::new(0),
+        data: AtomicUsize::new(0),
         gen: AtomicUsize::new(0),
         rc: rc_arr,
     };
@@ -24,7 +24,7 @@ fn main() {
     let mut handles = vec![];
     let arw = Arc::clone(&ar);
     let writer = thread::spawn(move || {
-		for _ in 0..10 {
+        for _ in 0..10 {
 			thread::sleep(time::Duration::from_millis(10));
 			let mut g = arw.gen.load(Ordering::Relaxed);
 			let mut d = arw.data.load(Ordering::Relaxed);
