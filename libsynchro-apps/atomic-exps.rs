@@ -71,7 +71,8 @@ fn main() {
         }
         arw.done.store(true, Ordering::SeqCst);
     });
-    
+
+	// reader threads
     for i in 0..10 {
         let arr = Arc::clone(&ar);
         let handle = thread::spawn(move || {
