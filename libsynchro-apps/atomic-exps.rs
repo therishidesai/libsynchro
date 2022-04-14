@@ -30,13 +30,13 @@ fn main() {
 
     let arc = Arc::clone(&ar);
     let cleanup = thread::spawn(move || {
-        while (!arc.done.load(Ordering::SeqCst)){
-            let gens = arc.gen.load(Ordering::SeqCst);
+        while (!arc.done.load(Ordering::Relaxed)){
+            let gens = arc.gen.load(Ordering::Relaxed);
             for i in 0..gens {
-                if (arc.rc[i].compare_exchange(0, -1, Ordering::SeqCst, Ordering::SeqCst) == Ok(0)) {
+                if (arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)) {
                     let ptr = arc.gen_data[i].load(Ordering::SeqCst);
+                    let b = unsafe { Box::from_raw(ptr) };
                     println!("Going to Free gen {}, ptr: {:?}!", i, ptr);
-                    //let b = unsafe { Box::from_raw(ptr) };
                 }
             }
             thread::sleep(time::Duration::from_millis(10));
@@ -45,14 +45,17 @@ fn main() {
         }
 
         println!("DONE!!!!");
-        let gens = arc.gen.load(Ordering::SeqCst);
+        let gens = arc.gen.load(Ordering::Relaxed);
         for i in 0..gens {
-            if (arc.rc[i].compare_exchange(0, -1, Ordering::SeqCst, Ordering::SeqCst) == Ok(0)) {
+            if (arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)) {
                 println!("Going to Free gen {}!", i);
                 let ptr = arc.gen_data[i].load(Ordering::SeqCst);
                 let b = unsafe { Box::from_raw(ptr) };
             }
         }
+        
+        let ptr = arc.data.load(Ordering::SeqCst);
+        let b = unsafe { Box::from_raw(ptr) };
     });
     
     let mut handles = vec![];
@@ -60,12 +63,11 @@ fn main() {
     let writer = thread::spawn(move || {
         for _ in 0..10 {
             thread::sleep(time::Duration::from_millis(10));
-            let g = arw.gen.load(Ordering::SeqCst);
-            let d = Box::into_raw(Box::new(g as isize));
-            let old_d = arw.data.swap(d, Ordering::SeqCst);
-            let old_g = arw.gen.fetch_add(1, Ordering::SeqCst);
-            arw.gen_data[old_g].swap(old_d, Ordering::SeqCst);
-            println!("gen {}, data {:?}", g, d);
+            let old_g = arw.gen.fetch_add(1, Ordering::AcqRel);
+            let d = Box::into_raw(Box::new(old_g as isize));
+            let old_d = arw.data.swap(d, Ordering::AcqRel);
+            arw.gen_data[old_g].store(old_d, Ordering::Relaxed);
+            println!("gen {}, data {:?}", old_g+1, d);
         }
         arw.done.store(true, Ordering::SeqCst);
     });
@@ -76,11 +78,11 @@ fn main() {
             for _ in 0..10 {
                 let mut rng = rand::thread_rng();
                 thread::sleep(time::Duration::from_millis(rng.gen_range(1..10)));
-                let num = arr.gen.load(Ordering::SeqCst);
-                arr.rc[num].fetch_add(1, Ordering::SeqCst);
+                let num = arr.gen.load(Ordering::Relaxed);
+                arr.rc[num].fetch_add(1, Ordering::Relaxed);
                 let d = arr.data.load(Ordering::SeqCst);
                 println!("Reader {}: gen {}, data {:?}", i, num, d);
-                arr.rc[num].fetch_sub(1, Ordering::SeqCst);
+                arr.rc[num].fetch_sub(1, Ordering::AcqRel);
             }
         });
         handles.push(handle);
