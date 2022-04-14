@@ -2,7 +2,7 @@ use arr_macro::arr;
 
 use rand::Rng;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::sync::atomic::{AtomicUsize, AtomicIsize, AtomicPtr, AtomicBool, Ordering};
 use std::{thread, time};
 
@@ -30,12 +30,12 @@ fn main() {
 
     let arc = Arc::clone(&ar);
     let cleanup = thread::spawn(move || {
-        while (!arc.done.load(Ordering::Relaxed)){
+        while !arc.done.load(Ordering::Relaxed) {
             let gens = arc.gen.load(Ordering::Relaxed);
             for i in 0..gens {
-                if (arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)) {
+                if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0) {
                     let ptr = arc.gen_data[i].load(Ordering::SeqCst);
-                    let b = unsafe { Box::from_raw(ptr) };
+                    unsafe { Box::from_raw(ptr) };
                     println!("Going to Free gen {}, ptr: {:?}!", i, ptr);
                 }
             }
@@ -47,15 +47,15 @@ fn main() {
         println!("DONE!!!!");
         let gens = arc.gen.load(Ordering::Relaxed);
         for i in 0..gens {
-            if (arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)) {
+            if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0) {
                 println!("Going to Free gen {}!", i);
                 let ptr = arc.gen_data[i].load(Ordering::SeqCst);
-                let b = unsafe { Box::from_raw(ptr) };
+                unsafe { Box::from_raw(ptr) };
             }
         }
         
         let ptr = arc.data.load(Ordering::SeqCst);
-        let b = unsafe { Box::from_raw(ptr) };
+        unsafe { Box::from_raw(ptr) };
     });
     
     let mut handles = vec![];
@@ -72,7 +72,7 @@ fn main() {
         arw.done.store(true, Ordering::SeqCst);
     });
 
-	// reader threads
+    // reader threads
     for i in 0..10 {
         let arr = Arc::clone(&ar);
         let handle = thread::spawn(move || {
