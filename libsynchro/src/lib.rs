@@ -127,3 +127,8 @@ pub fn rcu_read_unlock_wakeup<T: 'static>(arr: &Arc<RCU<T>>, gen: usize, wakeup_
 pub fn synchronize_rcu<T: 'static>(ar: &Arc<RCU<T>>) {
     ar.done.store(true, Ordering::Relaxed);
 }
+
+pub fn synchronize_rcu_wakeup<T: 'static>(ar: &Arc<RCU<T>>, wakeup_tx: &Sender<i8>) {
+    ar.done.store(true, Ordering::Relaxed);
+    wakeup_tx.send(1).unwrap();
+}

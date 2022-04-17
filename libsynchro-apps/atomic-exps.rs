@@ -19,6 +19,7 @@ fn main() {
 
     let mut handles = vec![];
     let arw = Arc::clone(&ar);
+    let wr_wakeup_tx = wakeup_tx.clone();
     let writer = thread::spawn(move || {
         for i in 0..10 {
             thread::sleep(time::Duration::from_millis(10));
@@ -26,7 +27,10 @@ fn main() {
             let old_g = libsynchro::rcu_write_update(&arw, d);
             println!("gen {}, data {:?}", old_g + 1, d);
         }
-        libsynchro::synchronize_rcu(&arw);
+        // if using the periodic cleanup use this
+        // libsynchro::synchronize_rcu(&arw);
+        // if using the wakeup based cleanup use this
+        libsynchro::synchronize_rcu_wakeup(&arw, &wr_wakeup_tx);
     });
 
     // reader threads
