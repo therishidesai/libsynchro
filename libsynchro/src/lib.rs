@@ -52,7 +52,7 @@ pub fn rcu_init_wakeup<T: 'static>(ar: &Arc<RCU<T>>) -> (thread::JoinHandle<()>,
             println!("DONE!!!!");
             // Synchronize RCU will set the done flag to true and we cleanup the rest
             let gens = arc.gen.load(Ordering::Relaxed);
-            for i in 0..gens {
+            for i in 0..gens + 1 {
                 if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)
                 {
                     println!("Going to Free gen {}!", i);
@@ -85,7 +85,7 @@ pub fn rcu_init_periodic<T: 'static>(ar: &Arc<RCU<T>>, period: u64) -> thread::J
         println!("DONE!!!!");
         // Synchronize RCU will set the done flag to true and we cleanup the rest
         let gens = arc.gen.load(Ordering::Relaxed);
-        for i in 0..gens {
+        for i in 0..gens + 1 {
             if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0) {
                 println!("Going to Free gen {}!", i);
                 let ptr = arc.gen_data[i].load(Ordering::SeqCst);
