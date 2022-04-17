@@ -5,6 +5,7 @@ edition = "2021"
 
 
 [dependencies]
+libsynchro = { version = "0.1.0", path = "../libsynchro" }
 arr_macro = "0.1.3"
 rand = "0.8.5"
 
