@@ -1,23 +1,22 @@
 use libsynchro::RCU;
 use rand::Rng;
 
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::{thread, time};
-use std::sync::mpsc::Sender;
-
-
 
 fn main() {
     let ptr = Box::into_raw(Box::new(0 as isize));
     let r = RCU::new(ptr);
     let ar = Arc::new(r);
 
-	// using the periodic cleanup
+    // using the periodic cleanup
     // let cleanup = libsynchro::rcu_init_periodic(&ar, 10);
 
-	// using the wakeup cleanup
-	let (cleanup, wakeup_tx): (thread::JoinHandle<()>, Sender<i8>) = libsynchro::rcu_init_wakeup(&ar);
-	
+    // using the wakeup cleanup
+    let (cleanup, wakeup_tx): (thread::JoinHandle<()>, Sender<i8>) =
+        libsynchro::rcu_init_wakeup(&ar);
+
     let mut handles = vec![];
     let arw = Arc::clone(&ar);
     let writer = thread::spawn(move || {
@@ -33,7 +32,7 @@ fn main() {
     // reader threads
     for i in 0..10 {
         let arr = Arc::clone(&ar);
-		let thread_tx = wakeup_tx.clone();
+        let thread_tx = wakeup_tx.clone();
         let handle = thread::spawn(move || {
             for _ in 0..10 {
                 let mut rng = rand::thread_rng();
@@ -41,10 +40,10 @@ fn main() {
                 let gen = libsynchro::rcu_read_lock(&arr);
                 let d = libsynchro::rcu_read_data(&arr, gen);
                 println!("Reader {}: gen {}, data {:?}", i, gen, d);
-				// if using the periodic cleanup
-				// libsynchro::rcu_read_unlock_periodic(&arr, gen);
-				// if using the wakeup cleanup
-				libsynchro::rcu_read_unlock_wakeup(&arr, gen, &thread_tx);
+                // if using the periodic cleanup
+                // libsynchro::rcu_read_unlock_periodic(&arr, gen);
+                // if using the wakeup cleanup
+                libsynchro::rcu_read_unlock_wakeup(&arr, gen, &thread_tx);
             }
         });
         handles.push(handle);
