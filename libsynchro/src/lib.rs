@@ -77,5 +77,5 @@ pub fn rcu_read_unlock<T: 'static>(arr: &Arc<RCU<T>>, gen: usize) {
 }
 
 pub fn synchronize_rcu<T: 'static>(ar: &Arc<RCU<T>>) {
-    ar.done.store(true, Ordering::SeqCst);
+    ar.done.store(true, Ordering::Relaxed);
 }
