@@ -2,6 +2,8 @@ use arr_macro::arr;
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
 use std::{thread, time};
 
 const MAX_GENERATIONS: usize = 1024;
@@ -26,7 +28,40 @@ impl<T> RCU<T> {
     }
 }
 
-pub fn rcu_init<T: 'static>(ar: &Arc<RCU<T>>) -> thread::JoinHandle<()> {
+// runs the cleanup thread when a read unlock signals the ref count is at 0
+pub fn rcu_init_wakeup<T: 'static>(ar: &Arc<RCU<T>>) -> (thread::JoinHandle<()>, Sender<i8>) {
+    let arc = Arc::clone(ar);
+	let (wakeup_tx, wakeup_rx): (Sender<i8>, Receiver<i8>) = mpsc::channel();
+    (thread::spawn(move || {
+        while !arc.done.load(Ordering::Relaxed) {
+            let gens = arc.gen.load(Ordering::Relaxed);
+            for i in 0..gens {
+                if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0)
+                {
+                    let ptr = arc.gen_data[i].load(Ordering::SeqCst);
+                    unsafe { Box::from_raw(ptr) };
+                    println!("Going to Free gen {}, ptr: {:?}!", i, ptr);
+                }
+            }
+
+			wakeup_rx.recv().unwrap();
+        }
+
+        println!("DONE!!!!");
+        // Synchronize RCU will set the done flag to true and we cleanup the rest
+        let gens = arc.gen.load(Ordering::Relaxed);
+        for i in 0..gens {
+            if arc.rc[i].compare_exchange(0, -1, Ordering::Release, Ordering::Relaxed) == Ok(0) {
+                println!("Going to Free gen {}!", i);
+                let ptr = arc.gen_data[i].load(Ordering::SeqCst);
+                unsafe { Box::from_raw(ptr) };
+            }
+        }
+    }), wakeup_tx)
+}
+
+// runs the cleanup thread for a given period (time in miliseconds)
+pub fn rcu_init_periodic<T: 'static>(ar: &Arc<RCU<T>>, period: u64) -> thread::JoinHandle<()> {
     let arc = Arc::clone(ar);
     thread::spawn(move || {
         while !arc.done.load(Ordering::Relaxed) {
@@ -39,8 +74,7 @@ pub fn rcu_init<T: 'static>(ar: &Arc<RCU<T>>) -> thread::JoinHandle<()> {
                     println!("Going to Free gen {}, ptr: {:?}!", i, ptr);
                 }
             }
-            // Spin looping as an initial impl, can change this to something smarter
-            thread::sleep(time::Duration::from_millis(10));
+            thread::sleep(time::Duration::from_millis(period));
         }
 
         println!("DONE!!!!");
@@ -72,8 +106,17 @@ pub fn rcu_read_data<T: 'static>(arr: &Arc<RCU<T>>, gen: usize) -> *mut T {
     arr.gen_data[gen].load(Ordering::SeqCst)
 }
 
-pub fn rcu_read_unlock<T: 'static>(arr: &Arc<RCU<T>>, gen: usize) {
+pub fn rcu_read_unlock_periodic<T: 'static>(arr: &Arc<RCU<T>>, gen: usize) {
     arr.rc[gen].fetch_sub(1, Ordering::AcqRel);
+}
+
+pub fn rcu_read_unlock_wakeup<T: 'static>(arr: &Arc<RCU<T>>, gen: usize, wakeup_tx: &Sender<i8>) {
+    arr.rc[gen].fetch_sub(1, Ordering::AcqRel);
+
+	if arr.rc[gen].load(Ordering::Relaxed) == 0 {
+		// will wakup the GC thread if rcu_init_wakup is used
+		wakeup_tx.send(1).unwrap();
+	}
 }
 
 pub fn synchronize_rcu<T: 'static>(ar: &Arc<RCU<T>>) {
